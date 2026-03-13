@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AttendanceForm from '../components/AttendanceForm';
+import CircularProgress from '../components/CircularProgress';
+import ParticleBackground from '../components/ParticleBackground';
 import { getEmployees } from '../api/employees';
 import api from '../api/axiosInstance';
 
@@ -9,11 +11,26 @@ const statusColors = {
   Leave: '#fbbc05',
 };
 
+/** Milliseconds in one minute — used for the shift-progress interval. */
+const MINUTE_MS = 60_000;
+function getShiftProgress() {
+  const now = new Date();
+  const shiftStart = new Date(now);
+  shiftStart.setHours(9, 0, 0, 0);
+  const shiftEnd = new Date(now);
+  shiftEnd.setHours(17, 0, 0, 0);
+
+  const elapsed = now - shiftStart;
+  const total = shiftEnd - shiftStart;
+  return Math.min(100, Math.max(0, (elapsed / total) * 100));
+}
+
 export default function AttendancePage() {
   const [employees, setEmployees] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [attendance, setAttendance] = useState([]);
+  const [shiftProgress, setShiftProgress] = useState(getShiftProgress);
 
   useEffect(() => {
     getEmployees().then(res => setEmployees(res.data));
@@ -27,6 +44,12 @@ export default function AttendancePage() {
     }
   }, [selectedEmployee]);
 
+  // Update shift progress every minute
+  useEffect(() => {
+    const id = setInterval(() => setShiftProgress(getShiftProgress()), MINUTE_MS);
+    return () => clearInterval(id);
+  }, []);
+
   async function handleAttendanceSave(data) {
     await api.post('/attendance', data);
     setShowForm(false);
@@ -34,22 +57,73 @@ export default function AttendancePage() {
   }
 
   return (
-    <div style={{ padding: '32px 24px', maxWidth: '900px', margin: '0 auto' }}>
-      <div style={{ background: '#fff', borderRadius: '8px', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', padding: '28px 24px', marginBottom: '32px' }}>
-        <h2 style={{ color: '#1a73e8', fontWeight: 700, marginBottom: '18px' }}>Attendance Management</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: '1rem', color: '#555' }}>
-            Employee:{' '}
-            <select style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '1rem' }} value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)}>
-              <option value="">-- Select --</option>
-              {employees.map(emp => (
-                <option key={emp._id} value={emp._id}>{emp.name}</option>
-              ))}
-            </select>
-          </label>
-          <button style={{ padding: '10px 22px', background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }} onClick={() => setShowForm(true)} disabled={!selectedEmployee}>Mark Attendance</button>
+    <div style={{ position: 'relative', padding: '32px 24px', maxWidth: '900px', margin: '0 auto' }}>
+      {/* Particle background — activates when an employee is selected */}
+      <ParticleBackground active={!!selectedEmployee} />
+
+      {/* Main card */}
+      <div
+        className="ems-fadeIn"
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          background: '#fff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+          padding: '28px 24px',
+          marginBottom: '32px',
+        }}
+      >
+        <h2 style={{ color: '#1a73e8', fontWeight: 700, marginBottom: '18px' }}>
+          Attendance Management
+        </h2>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '32px', flexWrap: 'wrap' }}>
+          {/* Employee selector + action */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: '1rem', color: '#555' }}>
+              Employee:{' '}
+              <select
+                style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '1rem' }}
+                value={selectedEmployee}
+                onChange={e => setSelectedEmployee(e.target.value)}
+              >
+                <option value="">-- Select --</option>
+                {employees.map(emp => (
+                  <option key={emp._id} value={emp._id}>{emp.name}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              style={{
+                padding: '10px 22px',
+                background: '#1a73e8',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                fontWeight: 600,
+                fontSize: '1rem',
+                cursor: 'pointer',
+              }}
+              onClick={() => setShowForm(true)}
+              disabled={!selectedEmployee}
+            >
+              Mark Attendance
+            </button>
+          </div>
+
+          {/* Shift progress ring — shows time elapsed in the current work day */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <CircularProgress value={shiftProgress} size={80} strokeWidth={8} />
+            </div>
+            <span style={{ fontSize: '0.78rem', color: '#888', textAlign: 'center' }}>
+              Shift Progress
+            </span>
+          </div>
         </div>
       </div>
+
       {showForm && (
         <AttendanceForm
           employees={employees}
@@ -57,8 +131,22 @@ export default function AttendancePage() {
           onClose={() => setShowForm(false)}
         />
       )}
-      <div style={{ background: '#fff', borderRadius: '8px', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', padding: '24px 20px' }}>
-        <h3 style={{ color: '#1a73e8', fontWeight: 600, marginBottom: '16px' }}>Attendance Records</h3>
+
+      {/* Attendance records */}
+      <div
+        className="ems-fadeIn"
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          background: '#fff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+          padding: '24px 20px',
+        }}
+      >
+        <h3 style={{ color: '#1a73e8', fontWeight: 600, marginBottom: '16px' }}>
+          Attendance Records
+        </h3>
         {attendance.length === 0 ? (
           <p style={{ color: '#888' }}>No attendance records found.</p>
         ) : (
@@ -73,9 +161,22 @@ export default function AttendancePage() {
               <tbody>
                 {attendance.map(record => (
                   <tr key={record._id}>
-                    <td style={{ padding: '10px 14px', borderBottom: '1px solid #e8eaed' }}>{new Date(record.date).toLocaleDateString()}</td>
                     <td style={{ padding: '10px 14px', borderBottom: '1px solid #e8eaed' }}>
-                      <span style={{ display: 'inline-block', padding: '4px 14px', borderRadius: '16px', background: statusColors[record.status] || '#ccc', color: '#fff', fontWeight: 600 }}>{record.status}</span>
+                      {new Date(record.date).toLocaleDateString()}
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid #e8eaed' }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          padding: '4px 14px',
+                          borderRadius: '16px',
+                          background: statusColors[record.status] || '#ccc',
+                          color: '#fff',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {record.status}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -87,3 +188,4 @@ export default function AttendancePage() {
     </div>
   );
 }
+
